@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#000000" />
+  <title>Still Starfield</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { background: #000000; }
+    #stars { display: block; width: 100vw; height: 100vh; background: #000000; }
+  </style>
+</head>
+<body>
+  <canvas id="stars" aria-label="Stationary, softly flickering white stars on a black background" role="img"></canvas>
+  <script>
+    (() => {
+      'use strict';
+      const canvas = document.getElementById('stars');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      if (!ctx) return;
+
+      // Adjust these values to customize the background.
+      const SETTINGS = {
+        starsPer10000Pixels: 1.35, // Approx. 280 stars at 1920 × 1080
+        minRadius: 0.35,
+        maxRadius: 1.15,
+        flickerSpeed: 0.00025, // Lower = slower flicker
+        flickerAmount: 0.22,   // Lower = subtler flicker
+        glowStrength: 5,      // Glow radius relative to star size
+        maxPixelRatio: 2
+      };
+
+      let stars = [];
+      let width = 0;
+      let height = 0;
+      let animationId = 0;
+      let lastDrawn = 0;
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+      const random = (min, max) => min + Math.random() * (max - min);
+
+      function rebuild() {
+        const oldWidth = width;
+        const oldHeight = height;
+        width = Math.max(1, window.innerWidth);
+        height = Math.max(1, window.innerHeight);
+        const ratio = Math.min(window.devicePixelRatio || 1, SETTINGS.maxPixelRatio);
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+        const count = Math.round(width * height / 10000 * SETTINGS.starsPer10000Pixels);
+        const oldStars = stars;
+        stars = Array.from({ length: count }, (_, i) => {
+          if (oldStars[i] && oldWidth && oldHeight) {
+            return { ...oldStars[i], x: oldStars[i].x / oldWidth * width,
+              y: oldStars[i].y / oldHeight * height };
+          }
+          return {
+            x: Math.random() * width,
+            y: Math.random() * height,
+            radius: random(SETTINGS.minRadius, SETTINGS.maxRadius),
+            brightness: random(0.48, 0.93),
+            phase: random(0, Math.PI * 2),
+            speed: random(0.55, 1.45)
+          };
+        });
+        draw(performance.now());
+      }
+
+      function draw(time) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, width, height);
+        for (const star of stars) {
+          // Positions never change; only brightness changes slowly.
+          const wave = Math.sin(time * SETTINGS.flickerSpeed * star.speed + star.phase);
+          const opacity = Math.max(0.1, Math.min(1,
+            star.brightness + wave * SETTINGS.flickerAmount));
+          const haloRadius = star.radius * SETTINGS.glowStrength;
+          const glow = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, haloRadius);
+          glow.addColorStop(0, `rgba(255,255,255,${opacity * 0.5})`);
+          glow.addColorStop(0.23, `rgba(255,255,255,${opacity * 0.13})`);
+          glow.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, haloRadius, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = `rgba(255,255,255,${opacity})`;
+          ctx.beginPath();
+          ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      function animate(time) {
+        if (time - lastDrawn >= 33) { // ~30 FPS; enough for very slow flicker
+          draw(time);
+          lastDrawn = time;
+        }
+        animationId = requestAnimationFrame(animate);
+      }
+
+      function motionChanged() {
+        cancelAnimationFrame(animationId);
+        if (reduceMotion.matches) draw(0);
+        else animationId = requestAnimationFrame(animate);
+      }
+
+      window.addEventListener('resize', rebuild, { passive: true });
+      reduceMotion.addEventListener('change', motionChanged);
+      rebuild();
+      motionChanged();
+    })();
+  </script>
+</body>
+</html>
